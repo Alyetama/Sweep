@@ -17,7 +17,7 @@ guard let winImg = NSImage(contentsOfFile: inPath),
 }
 let ww = CGFloat(win.width), wh = CGFloat(win.height)
 
-let padX: CGFloat = 380, padTop: CGFloat = 250, padBottom: CGFloat = 300
+let padX: CGFloat = 140, padTop: CGFloat = 110, padBottom: CGFloat = 170
 let W = Int(ww + padX * 2), H = Int(wh + padTop + padBottom)
 
 guard let rep = NSBitmapImageRep(
