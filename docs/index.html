@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sweep — the macOS app uninstaller that removes every trace</title>
+<meta name="description" content="A native macOS app uninstaller that finds every file an app leaves behind — and cleans up leftovers from apps you've already deleted." />
+<meta property="og:title" content="Sweep" />
+<meta property="og:description" content="A native macOS app uninstaller that finds every file an app leaves behind — caches, preferences, containers, logs — and cleans up leftovers too." />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="https://alyetama.github.io/Sweep/mockup.png" />
+<link rel="icon" href="icon.png" />
+<style>
+  :root {
+    --bg: #0f1216; --panel: #171b22; --panel2: #1d2230; --line: #272d39;
+    --fg: #c2c8d4; --fg-strong: #f2f4f8; --muted: #8b93a3;
+    --teal: #33D4BD; --indigo: #5B6BFF; --accent: #4C7CF5; --danger: #FF5A5C;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--teal); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px; }
+  code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  /* Hero */
+  .hero {
+    text-align: center; padding: 86px 0 30px; position: relative; overflow: hidden;
+    background:
+      radial-gradient(1100px 460px at 50% -120px, rgba(91,107,255,0.30), transparent 70%),
+      radial-gradient(900px 420px at 80% 0, rgba(51,212,189,0.18), transparent 65%);
+  }
+  .logo { width: 108px; height: 108px; margin: 0 auto 22px; display: block;
+          filter: drop-shadow(0 16px 40px rgba(76,124,245,0.45)); }
+  h1 { font-size: 46px; margin: 0 0 12px; color: var(--fg-strong); letter-spacing: -0.6px; }
+  .tagline { font-size: 19px; color: var(--muted); margin: 0 auto 30px; max-width: 600px; }
+  .cta { display: inline-flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; padding: 13px 24px;
+    border-radius: 11px; font-weight: 600; font-size: 15px; cursor: pointer; border: 0;
+    color: #fff; background: linear-gradient(135deg, var(--teal), var(--indigo));
+    transition: transform .12s ease, filter .12s ease;
+  }
+  .btn:hover { filter: brightness(1.07); transform: translateY(-1px); text-decoration: none; }
+  .btn.secondary { background: var(--panel2); color: var(--fg-strong); border: 1px solid var(--line); }
+  .subnote { margin-top: 16px; font-size: 13.5px; color: var(--muted); }
+
+  .shot { padding: 8px 0 20px; }
+  .shot img { width: 100%; max-width: 900px; display: block; margin: 0 auto;
+              border-radius: 16px; }
+
+  section { padding: 46px 0; }
+  h2 { color: var(--fg-strong); font-size: 27px; margin: 0 0 26px; text-align: center; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 22px; }
+  .card .ico { font-size: 22px; margin-bottom: 10px; }
+  .card h3 { margin: 0 0 6px; color: var(--fg-strong); font-size: 16.5px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+  .note { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 26px 28px; }
+  .note .label { display: inline-block; font-size: 12px; font-weight: 700; color: #08231f;
+                 background: var(--teal); padding: 4px 12px; border-radius: 999px; margin-bottom: 12px; }
+  .note h2 { font-size: 22px; margin: 0 0 4px; text-align: left; }
+  .note p { margin: 12px 0; }
+  .note .sub { font-weight: 700; color: var(--fg-strong); margin: 20px 0 8px; }
+  .note ol { margin: 6px 0 0; padding-left: 20px; } .note li { margin: 7px 0; }
+  .note strong { color: var(--fg-strong); }
+  .code { background: var(--bg); border: 1px solid var(--line); border-radius: 11px;
+          padding: 14px 16px; overflow-x: auto; font-size: 13.5px; color: var(--fg-strong); }
+  .note.flash { animation: flash 1.4s ease; }
+  @keyframes flash { 0%,100% { box-shadow: 0 0 0 0 rgba(51,212,189,0); } 25% { box-shadow: 0 0 0 4px rgba(51,212,189,0.6); } }
+
+  footer { border-top: 1px solid var(--line); margin-top: 30px; padding: 30px 0 60px;
+           color: var(--muted); font-size: 14px; text-align: center; }
+
+  /* Modal */
+  .overlay { position: fixed; inset: 0; background: rgba(6,8,12,0.66); backdrop-filter: blur(6px);
+             display: none; align-items: center; justify-content: center; padding: 24px; z-index: 50; }
+  .overlay.show { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--line); border-radius: 20px;
+           max-width: 540px; width: 100%; padding: 28px 30px; box-shadow: 0 30px 80px rgba(0,0,0,0.55); }
+  .modal h3 { margin: 0 0 6px; color: var(--fg-strong); font-size: 21px; }
+  .modal p { margin: 10px 0; font-size: 14.5px; }
+  .modal .sub { font-weight: 700; color: var(--fg-strong); margin: 18px 0 8px; }
+  .modal .close { float: right; cursor: pointer; color: var(--muted); font-size: 22px; line-height: 1; border: 0; background: none; }
+  .modal .done { margin-top: 22px; width: 100%; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <img class="logo" src="icon.png" width="108" height="108" alt="Sweep app icon" />
+    <h1>Sweep</h1>
+    <p class="tagline">The native macOS app uninstaller that removes every trace — and cleans up the leftovers other uninstalls forget.</p>
+    <div class="cta">
+      <a class="btn" href="https://github.com/Alyetama/Sweep/releases/latest/download/Sweep.dmg" onclick="showOpenHelp()">⬇&nbsp; Download for macOS</a>
+      <a class="btn secondary" href="https://github.com/Alyetama/Sweep">View on GitHub</a>
+    </div>
+    <p class="subnote">macOS 13+ · free &amp; open-source · <a href="#first-launch" onclick="showOpenHelp()">how to open it on first launch →</a></p>
+  </div>
+</header>
+
+<div class="wrap shot">
+  <img src="mockup.png" alt="Sweep showing an app's associated files grouped by category, all pre-selected for removal" />
+</div>
+
+<section>
+  <div class="wrap">
+    <h2>Everything drag-to-trash leaves behind</h2>
+    <div class="grid">
+      <div class="card"><div class="ico">🧹</div><h3>Complete uninstall</h3><p>Pick an app and Sweep finds its caches, preferences, containers, logs, saved state, cookies, login items and more — grouped and pre-selected.</p></div>
+      <div class="card"><div class="ico">🔍</div><h3>Finds the hidden gigabytes</h3><p>Handles vendor-nested, version-suffixed folders like <span class="mono">JetBrains/DataSpell2024.2</span> — precisely, so it never grabs an unrelated app's data.</p></div>
+      <div class="card"><div class="ico">✨</div><h3>Leftovers scanner</h3><p>Hunts down orphaned files from apps you've already deleted, grouped by app and expandable to the file level.</p></div>
+      <div class="card"><div class="ico">♻️</div><h3>Safe by design</h3><p>Everything is moved to the Trash — fully recoverable, never hard-deleted. No telemetry, no dependencies.</p></div>
+      <div class="card"><div class="ico">⚡</div><h3>Fast &amp; native</h3><p>Pure SwiftUI. Search and sort your apps by size, name or last-used in an instant.</p></div>
+      <div class="card"><div class="ico">🆓</div><h3>Free &amp; open-source</h3><p>MIT licensed. Build it yourself or grab the signed-by-you build.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="first-launch">
+  <div class="wrap">
+    <div class="note" id="firstLaunchNote">
+      <span class="label">First launch</span>
+      <h2>Opening Sweep the first time</h2>
+      <p>Sweep is open-source and ad-hoc signed — there's no paid Apple Developer
+      ID — so macOS Gatekeeper blocks it the first time you open it. After dragging
+      Sweep into your <strong>Applications</strong> folder, do one of these (you
+      only need to do it <strong>once</strong>):</p>
+
+      <p class="sub">Option A — Terminal (quickest)</p>
+      <div class="code mono">xattr -dr com.apple.quarantine /Applications/Sweep.app</div>
+      <p>Then open Sweep normally from Launchpad or Applications.</p>
+
+      <p class="sub">Option B — System Settings</p>
+      <ol>
+        <li>Double-click <strong>Sweep</strong>, then click <strong>Done</strong> on the warning.</li>
+        <li>Open <strong>System Settings → Privacy &amp; Security</strong>.</li>
+        <li>Scroll down and click <strong>Open Anyway</strong> next to “Sweep was blocked…”, then <strong>Open</strong>.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Sweep · <a href="https://github.com/Alyetama/Sweep">GitHub</a> ·
+    <a href="https://github.com/Alyetama/Sweep/releases/latest">Releases</a> ·
+    MIT © Alyetama
+  </div>
+</footer>
+
+<!-- Download instructions modal -->
+<div class="overlay" id="openHelp">
+  <div class="modal">
+    <button class="close" onclick="hideOpenHelp()" aria-label="Close">&times;</button>
+    <h3>Your download is starting…</h3>
+    <p>Sweep is ad-hoc signed (no paid Apple Developer ID), so macOS blocks it the
+    first time. Open the <strong>.dmg</strong>, drag Sweep into
+    <strong>Applications</strong>, then do this <strong>once</strong>:</p>
+
+    <p class="sub">Quickest — Terminal</p>
+    <div class="code mono">xattr -dr com.apple.quarantine /Applications/Sweep.app</div>
+
+    <p class="sub">Or — System Settings</p>
+    <p>Double-click Sweep → <strong>Done</strong>, then <strong>System Settings →
+    Privacy &amp; Security → Open Anyway</strong>.</p>
+
+    <button class="btn done" onclick="hideOpenHelp()">Got it</button>
+  </div>
+</div>
+
+<script>
+  function showOpenHelp() {
+    document.getElementById('openHelp').classList.add('show');
+    var note = document.getElementById('firstLaunchNote');
+    if (note) { note.classList.remove('flash'); void note.offsetWidth; note.classList.add('flash'); }
+  }
+  function hideOpenHelp() { document.getElementById('openHelp').classList.remove('show'); }
+  document.getElementById('openHelp').addEventListener('click', function (e) {
+    if (e.target === this) hideOpenHelp();
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hideOpenHelp(); });
+</script>
+</body>
+</html>
