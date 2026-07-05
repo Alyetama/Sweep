@@ -48,7 +48,7 @@ macOS Gatekeeper blocks it the first time. You only need to do this **once**:
 **Option A — Terminal (quickest)**
 
 ```sh
-xattr -dr com.apple.quarantine /Applications/Sweep.app
+/usr/bin/xattr -dr com.apple.quarantine /Applications/Sweep.app
 ```
 
 Then open Sweep normally from Launchpad or Applications.

@@ -85,7 +85,7 @@ Gatekeeper blocks it on first launch. Do one of these once:
 
 **Terminal (quickest)**
 ```
-xattr -dr com.apple.quarantine /Applications/Sweep.app
+/usr/bin/xattr -dr com.apple.quarantine /Applications/Sweep.app
 ```
 then open it normally.
 
