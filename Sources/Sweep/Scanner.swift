@@ -64,56 +64,86 @@ enum Scanner {
     /// Lists installed third-party apps (metadata only; `sizeBytes` is left at
     /// -1 for the caller to fill in asynchronously).
     static func installedApps() -> [InstalledApp] {
-        var seen = Set<String>()
+        var byID = Set<String>()
+        var byPath = Set<String>()
         var result: [InstalledApp] = []
+
+        func consider(_ url: URL) {
+            guard byPath.insert(url.standardizedFileURL.path).inserted,
+                  let app = makeApp(url: url, isSystem: false),
+                  byID.insert(app.id).inserted else { return }
+            result.append(app)
+        }
+
+        // Fast, predictable pass over the common app folders…
         for dir in Locations.appDirs {
-            for app in apps(in: dir, isSystem: false) where seen.insert(app.id).inserted {
-                result.append(app)
-            }
+            for url in appBundles(in: dir) { consider(url) }
+        }
+        // …then Spotlight, to catch third-party apps living in sub-folders
+        // (Adobe, Setapp, JetBrains Toolbox, etc.) the shallow scan would miss.
+        for url in spotlightAppBundles() where !isSystemPath(url.path) {
+            consider(url)
         }
         return result.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
-    /// Every app on the machine (third-party + Apple), used to know which bundle
-    /// ids still have an owner when hunting for leftovers.
+    /// Every bundle id with an installed owner — used to decide whether a support
+    /// file is truly orphaned. Over-inclusive on purpose: a *missed* app here
+    /// gets its files mislabelled as leftovers (and offered for deletion), so we
+    /// cast the widest net — folder scan + Spotlight, third-party + Apple apps.
     static func allBundleIDs() -> Set<String> {
         var ids = Set<String>()
         for dir in Locations.appDirs + Locations.systemAppDirs {
-            for app in apps(in: dir, isSystem: true) {
-                if let bid = app.bundleID { ids.insert(bid.lowercased()) }
+            for url in appBundles(in: dir) {
+                if let bid = Bundle(url: url)?.bundleIdentifier { ids.insert(bid.lowercased()) }
             }
+        }
+        for url in spotlightAppBundles() {
+            if let bid = Bundle(url: url)?.bundleIdentifier { ids.insert(bid.lowercased()) }
         }
         return ids
     }
 
-    private static func apps(in dir: URL, isSystem: Bool) -> [InstalledApp] {
-        let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(
-            at: dir, includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]) else { return [] }
+    private static func appBundles(in dir: URL) -> [URL] {
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else { return [] }
+        return entries.filter { $0.pathExtension == "app" }
+    }
 
-        var result: [InstalledApp] = []
-        for url in entries where url.pathExtension == "app" {
-            guard let bundle = Bundle(url: url) else { continue }
-            let info = bundle.infoDictionary ?? [:]
-            let name = (info["CFBundleDisplayName"] as? String)
-                ?? (info["CFBundleName"] as? String)
-                ?? url.deletingPathExtension().lastPathComponent
-            let bundleID = bundle.bundleIdentifier
-            let version = (info["CFBundleShortVersionString"] as? String)
-                ?? (info["CFBundleVersion"] as? String)
-            result.append(InstalledApp(
-                id: bundleID ?? url.path,
-                name: name,
-                bundleID: bundleID,
-                version: version,
-                path: url,
-                isSystem: isSystem,
-                sizeBytes: -1,
-                lastUsed: lastUsedDate(for: url)
-            ))
-        }
-        return result
+    /// Every app bundle Spotlight knows about, excluding helper apps nested
+    /// inside other bundles/frameworks (paths containing ".app/").
+    private static func spotlightAppBundles() -> [URL] {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/mdfind")
+        p.arguments = ["kMDItemContentTypeTree == 'com.apple.application-bundle'"]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return [] }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return String(decoding: data, as: UTF8.self)
+            .split(separator: "\n").map(String.init)
+            .filter { $0.hasSuffix(".app") && !$0.contains(".app/") }
+            .map { URL(fileURLWithPath: $0) }
+    }
+
+    private static func isSystemPath(_ path: String) -> Bool {
+        path.hasPrefix("/System/") || path.hasPrefix("/Library/") || path.hasPrefix("/usr/")
+    }
+
+    private static func makeApp(url: URL, isSystem: Bool) -> InstalledApp? {
+        guard url.pathExtension == "app", let bundle = Bundle(url: url) else { return nil }
+        let info = bundle.infoDictionary ?? [:]
+        let name = (info["CFBundleDisplayName"] as? String)
+            ?? (info["CFBundleName"] as? String)
+            ?? url.deletingPathExtension().lastPathComponent
+        let bundleID = bundle.bundleIdentifier
+        let version = (info["CFBundleShortVersionString"] as? String)
+            ?? (info["CFBundleVersion"] as? String)
+        return InstalledApp(
+            id: bundleID ?? url.path, name: name, bundleID: bundleID, version: version,
+            path: url, isSystem: isSystem, sizeBytes: -1, lastUsed: lastUsedDate(for: url))
     }
 
     /// Spotlight's last-used date for an app bundle (no special permission needed
@@ -277,8 +307,24 @@ enum Scanner {
                                           as category: FileCategory) {
         guard let bid, !bid.isEmpty else { return }
         scanDir(dir) { url, child in
-            if child.lowercased().contains(bid) { out.append((url, category)) }
+            if containsBounded(child.lowercased(), bid) { out.append((url, category)) }
         }
+    }
+
+    /// True if `bid` appears in `name` as a whole dot-delimited token run — i.e.
+    /// bounded by the string edges or non-alphanumeric characters. Stops
+    /// `com.foo.bar` from matching `com.foo.bar2` or `group.com.foo.bard`.
+    private static func containsBounded(_ name: String, _ bid: String) -> Bool {
+        var from = name.startIndex
+        while let r = name.range(of: bid, range: from..<name.endIndex) {
+            let beforeOK = r.lowerBound == name.startIndex
+                || !name[name.index(before: r.lowerBound)].isBundleWordChar
+            let afterOK = r.upperBound == name.endIndex
+                || !name[r.upperBound].isBundleWordChar
+            if beforeOK && afterOK { return true }
+            from = name.index(after: r.lowerBound)
+        }
+        return false
     }
 
     private static func addGlob(in dir: URL, prefix: String, suffix: String?,
@@ -351,4 +397,10 @@ enum Scanner {
         let last = bid.split(separator: ".").last.map(String.init) ?? bid
         return last.prefix(1).uppercased() + last.dropFirst()
     }
+}
+
+private extension Character {
+    /// A character that keeps a bundle-id token "word" going (letter or digit);
+    /// dots, dashes and underscores are treated as token boundaries.
+    var isBundleWordChar: Bool { isLetter || isNumber }
 }

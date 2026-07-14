@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// All UI state + the glue between the views and the background scanners.
 @MainActor
@@ -65,19 +66,31 @@ final class AppModel: ObservableObject {
         reloadApps()
     }
 
+    /// Bumped on each reload so a stale (e.g. ⌘R-spammed) background pass can tell
+    /// it's been superseded and bail instead of writing over newer results.
+    private var loadGeneration = 0
+
     func reloadApps() {
         isLoadingApps = true
+        loadGeneration &+= 1
+        let generation = loadGeneration
         Task.detached(priority: .userInitiated) {
             let list = Scanner.installedApps()
             await MainActor.run {
+                guard generation == self.loadGeneration else { return }
                 self.apps = list
                 self.isLoadingApps = false
+                // Drop a selection whose app is no longer installed.
+                if let sel = self.selectedAppID, !list.contains(where: { $0.id == sel }) {
+                    self.deselectApp()
+                }
             }
             // Second pass: fill in bundle sizes so the list paints instantly and
             // the (slower) sizes stream in.
             for app in list {
                 let size = diskSize(of: app.path)
                 await MainActor.run {
+                    guard generation == self.loadGeneration else { return }
                     if let i = self.apps.firstIndex(where: { $0.id == app.id }) {
                         self.apps[i].sizeBytes = size
                     }
@@ -143,9 +156,14 @@ final class AppModel: ObservableObject {
     func requestUninstall() {
         guard let app = selectedApp else { return }
         let files = relatedFiles.filter(\.isSelected)
+        var message = "\(files.count) item\(files.count == 1 ? "" : "s") will be moved to the Trash."
+        if let bid = app.bundleID,
+           !NSRunningApplication.runningApplications(withBundleIdentifier: bid).isEmpty {
+            message += "\n\n\(app.name) is currently open — quit it first for a clean removal."
+        }
         pendingConfirm = PendingRemoval(
             title: "Uninstall \(app.name)?",
-            message: "\(files.count) item\(files.count == 1 ? "" : "s") will be moved to the Trash.",
+            message: message,
             bytes: files.reduce(0) { $0 + $1.sizeBytes },
             files: files,
             appID: app.id,
@@ -219,9 +237,15 @@ final class AppModel: ObservableObject {
 
     private func finish(_ outcome: Remover.Outcome, sizes: [URL: Int64],
                         title: String, removedAppID: InstalledApp.ID?) {
-        if let id = removedAppID, !apps.contains(where: { FileManager.default.fileExists(atPath: $0.path.path) && $0.id == id }) {
-            apps.removeAll { $0.id == id }
-            if selectedAppID == id { deselectApp() }
+        if let id = removedAppID {
+            // Drop the app from the list only once its bundle is actually gone
+            // (a bundle that needed admin rights to remove may still be present).
+            let stillInstalled = apps.first { $0.id == id }
+                .map { FileManager.default.fileExists(atPath: $0.path.path) } ?? false
+            if !stillInstalled {
+                apps.removeAll { $0.id == id }
+                if selectedAppID == id { deselectApp() }
+            }
         }
 
         result = RemovalResult(title: title, freedBytes: outcome.freedBytes,
