@@ -6,10 +6,10 @@
 
 **A native macOS app uninstaller that removes every trace.**
 
-Dragging an app to the Trash leaves its caches, preferences, containers, logs and
-support files scattered across your Mac. Sweep finds them all, shows them to you
-pre-selected, and asks before removing anything — and it cleans up leftovers from
-apps you've *already* deleted.
+When you drag an app to the Trash, its caches, preferences, containers and logs
+stay behind. Sweep tracks those files down, shows you the whole list with
+everything already ticked, and waits for your OK before it deletes a thing. It
+also digs up junk left over from apps you got rid of ages ago.
 
 [![Download](https://img.shields.io/badge/Download-for%20macOS-4C7CF5?style=for-the-badge&logo=apple)](https://github.com/Alyetama/Sweep/releases/latest/download/Sweep.dmg)
 &nbsp;
@@ -23,17 +23,17 @@ apps you've *already* deleted.
 
 ## Features
 
-- **Complete uninstall** — pick an app and Sweep finds everything it scattered:
-  Application Support, Caches, Preferences, Containers, Group Containers, Saved
-  State, Logs, Cookies, Web Data, Login Items & helpers, and Crash Reports.
-- **Finds what drag-to-trash misses** — handles vendor-nested, version-suffixed
-  folders (e.g. `Application Support/JetBrains/DataSpell2024.2`), with
-  boundary-aware matching so `Notion` never sweeps up `NotionCalendar`.
-- **Leftovers scanner** — finds orphaned files left behind by apps you've already
-  removed, grouped by app and expandable to the file level.
-- **Safe by design** — everything is moved to the **Trash** (recoverable), never
-  hard-deleted. Search and sort by size, name or last-used.
-- **Native & lightweight** — pure SwiftUI, no dependencies, no telemetry.
+- Pick an app and Sweep finds everything it scattered: Application Support,
+  Caches, Preferences, Containers, Group Containers, Saved State, Logs, Cookies,
+  Web Data, login items, and Crash Reports.
+- It catches what dragging to the Trash leaves behind, including vendor folders
+  with version numbers like `Application Support/JetBrains/DataSpell2024.2`.
+  Matching is careful, so uninstalling `Notion` won't drag out `NotionCalendar`.
+- The Leftovers tab hunts down orphaned files from apps that are already gone,
+  grouped by app so you can expand a group and see exactly what's there.
+- Nothing gets deleted outright. Files go to the Trash, so you can put them back
+  if you change your mind. Sort by size, name, or last used.
+- Plain SwiftUI. No dependencies, nothing phones home.
 
 ## Install
 
@@ -42,10 +42,10 @@ apps you've *already* deleted.
 
 ### Opening it the first time
 
-Sweep is open-source and ad-hoc signed — there's no paid Apple Developer ID — so
-macOS Gatekeeper blocks it the first time. You only need to do this **once**:
+Sweep is open source and isn't signed with a paid Apple Developer ID, so macOS
+Gatekeeper blocks it the first time you open it. You only have to clear that once.
 
-**Option A — Terminal (quickest)**
+**Option A: Terminal (quickest)**
 
 ```sh
 /usr/bin/xattr -dr com.apple.quarantine /Applications/Sweep.app
@@ -53,15 +53,15 @@ macOS Gatekeeper blocks it the first time. You only need to do this **once**:
 
 Then open Sweep normally from Launchpad or Applications.
 
-**Option B — System Settings**
+**Option B: System Settings**
 
 1. Double-click **Sweep**, then click **Done** on the warning.
-2. Open **System Settings → Privacy & Security**.
-3. Scroll down and click **Open Anyway** next to *“Sweep was blocked…”*, then **Open**.
+2. Open **System Settings > Privacy & Security**.
+3. Scroll down and click **Open Anyway** next to "Sweep was blocked", then **Open**.
 
-> For protected folders (Mail, Messages, Safari…), grant Sweep **Full Disk
-> Access** in System Settings → Privacy & Security so it can find and remove those
-> files too.
+> Some folders (Mail, Messages, Safari) are locked down by macOS. If you want
+> Sweep to reach those too, give it **Full Disk Access** in System Settings >
+> Privacy & Security.
 
 ## Build from source
 
@@ -71,13 +71,13 @@ cd Sweep
 ./run.sh          # build (release) + launch
 ```
 
-Requires the Swift 6 toolchain (Xcode 16+). Built with Swift Package Manager and
-ad-hoc code-signed — no Xcode project required.
+You'll need the Swift 6 toolchain (Xcode 16 or newer). It's a Swift Package
+Manager project that ad-hoc signs itself, so there's no Xcode project to open.
 
 ```
 Sources/Sweep/
   App.swift            # @main scene
-  Models.swift         # InstalledApp, RelatedFile, FileCategory, LeftoverGroup…
+  Models.swift         # InstalledApp, RelatedFile, FileCategory, LeftoverGroup
   Scanner.swift        # app discovery, related-file matching, leftovers scan
   Remover.swift        # move-to-Trash + admin-escalation fallback
   AppModel.swift       # @MainActor view model / background-scan glue

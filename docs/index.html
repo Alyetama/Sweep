@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Sweep — the macOS app uninstaller that removes every trace</title>
-<meta name="description" content="A native macOS app uninstaller that finds every file an app leaves behind — and cleans up leftovers from apps you've already deleted." />
+<title>Sweep, the macOS app uninstaller that removes every trace</title>
+<meta name="description" content="A native macOS app uninstaller that finds every file an app leaves behind, and clears out leftovers from apps you've already deleted." />
 <meta property="og:title" content="Sweep" />
-<meta property="og:description" content="A native macOS app uninstaller that finds every file an app leaves behind — caches, preferences, containers, logs — and cleans up leftovers too." />
+<meta property="og:description" content="A native macOS app uninstaller that finds every file an app leaves behind (caches, preferences, containers, logs), and clears out old leftovers too." />
 <meta property="og:type" content="website" />
 <meta property="og:image" content="https://alyetama.github.io/Sweep/mockup.png" />
 <link rel="icon" href="icon.png" />
@@ -98,7 +98,7 @@
   <div class="wrap">
     <img class="logo" src="icon.png" width="108" height="108" alt="Sweep app icon" />
     <h1>Sweep</h1>
-    <p class="tagline">The native macOS app uninstaller that removes every trace — and cleans up the leftovers other uninstalls forget.</p>
+    <p class="tagline">The native macOS app uninstaller that removes every trace, right down to the leftovers other uninstallers forget.</p>
     <div class="cta">
       <a class="btn" href="https://github.com/Alyetama/Sweep/releases/latest/download/Sweep.dmg" onclick="showOpenHelp()">⬇&nbsp; Download for macOS</a>
       <a class="btn secondary" href="https://github.com/Alyetama/Sweep">View on GitHub</a>
@@ -115,12 +115,12 @@
   <div class="wrap">
     <h2>Everything drag-to-trash leaves behind</h2>
     <div class="grid">
-      <div class="card"><div class="ico">🧹</div><h3>Complete uninstall</h3><p>Pick an app and Sweep finds its caches, preferences, containers, logs, saved state, cookies, login items and more — grouped and pre-selected.</p></div>
-      <div class="card"><div class="ico">🔍</div><h3>Finds the hidden gigabytes</h3><p>Handles vendor-nested, version-suffixed folders like <span class="mono">JetBrains/DataSpell2024.2</span> — precisely, so it never grabs an unrelated app's data.</p></div>
-      <div class="card"><div class="ico">✨</div><h3>Leftovers scanner</h3><p>Hunts down orphaned files from apps you've already deleted, grouped by app and expandable to the file level.</p></div>
-      <div class="card"><div class="ico">♻️</div><h3>Safe by design</h3><p>Everything is moved to the Trash — fully recoverable, never hard-deleted. No telemetry, no dependencies.</p></div>
-      <div class="card"><div class="ico">⚡</div><h3>Fast &amp; native</h3><p>Pure SwiftUI. Search and sort your apps by size, name or last-used in an instant.</p></div>
-      <div class="card"><div class="ico">🆓</div><h3>Free &amp; open-source</h3><p>MIT licensed. Build it yourself or grab the signed-by-you build.</p></div>
+      <div class="card"><div class="ico">🧹</div><h3>Complete uninstall</h3><p>Pick an app and Sweep finds its caches, preferences, containers, logs, saved state, cookies and login items, all grouped and ticked ready to go.</p></div>
+      <div class="card"><div class="ico">🔍</div><h3>Finds the hidden gigabytes</h3><p>It reaches into versioned vendor folders like <span class="mono">JetBrains/DataSpell2024.2</span>, and it's careful enough not to grab an unrelated app's data.</p></div>
+      <div class="card"><div class="ico">✨</div><h3>Leftovers scanner</h3><p>Digs up orphaned files from apps you've already deleted, grouped by app so you can expand a group and see what's there.</p></div>
+      <div class="card"><div class="ico">♻️</div><h3>Nothing gets lost</h3><p>Files go to the Trash, so you can put them back if you change your mind. Nothing is deleted outright, and nothing phones home.</p></div>
+      <div class="card"><div class="ico">⚡</div><h3>Fast and native</h3><p>Plain SwiftUI. Search and sort your apps by size, name or last used without waiting around.</p></div>
+      <div class="card"><div class="ico">🆓</div><h3>Free and open source</h3><p>MIT licensed. Build it yourself, or grab the release and run it.</p></div>
     </div>
   </div>
 </section>
@@ -130,20 +130,20 @@
     <div class="note" id="firstLaunchNote">
       <span class="label">First launch</span>
       <h2>Opening Sweep the first time</h2>
-      <p>Sweep is open-source and ad-hoc signed — there's no paid Apple Developer
-      ID — so macOS Gatekeeper blocks it the first time you open it. After dragging
-      Sweep into your <strong>Applications</strong> folder, do one of these (you
-      only need to do it <strong>once</strong>):</p>
+      <p>Sweep is open source and isn't signed with a paid Apple Developer ID, so
+      macOS Gatekeeper blocks it the first time you open it. Once you've dragged
+      Sweep into your <strong>Applications</strong> folder, do one of these. You
+      only have to do it <strong>once</strong>.</p>
 
-      <p class="sub">Option A — Terminal (quickest)</p>
+      <p class="sub">Option A: Terminal (quickest)</p>
       <div class="code mono">/usr/bin/xattr -dr com.apple.quarantine /Applications/Sweep.app</div>
       <p>Then open Sweep normally from Launchpad or Applications.</p>
 
-      <p class="sub">Option B — System Settings</p>
+      <p class="sub">Option B: System Settings</p>
       <ol>
         <li>Double-click <strong>Sweep</strong>, then click <strong>Done</strong> on the warning.</li>
-        <li>Open <strong>System Settings → Privacy &amp; Security</strong>.</li>
-        <li>Scroll down and click <strong>Open Anyway</strong> next to “Sweep was blocked…”, then <strong>Open</strong>.</li>
+        <li>Open <strong>System Settings > Privacy &amp; Security</strong>.</li>
+        <li>Scroll down and click <strong>Open Anyway</strong> next to "Sweep was blocked", then <strong>Open</strong>.</li>
       </ol>
     </div>
   </div>
@@ -161,17 +161,17 @@
 <div class="overlay" id="openHelp">
   <div class="modal">
     <button class="close" onclick="hideOpenHelp()" aria-label="Close">&times;</button>
-    <h3>Your download is starting…</h3>
-    <p>Sweep is ad-hoc signed (no paid Apple Developer ID), so macOS blocks it the
+    <h3>Your download is starting</h3>
+    <p>Sweep isn't signed with a paid Apple Developer ID, so macOS blocks it the
     first time. Open the <strong>.dmg</strong>, drag Sweep into
     <strong>Applications</strong>, then do this <strong>once</strong>:</p>
 
-    <p class="sub">Quickest — Terminal</p>
+    <p class="sub">Quickest: Terminal</p>
     <div class="code mono">/usr/bin/xattr -dr com.apple.quarantine /Applications/Sweep.app</div>
 
-    <p class="sub">Or — System Settings</p>
-    <p>Double-click Sweep → <strong>Done</strong>, then <strong>System Settings →
-    Privacy &amp; Security → Open Anyway</strong>.</p>
+    <p class="sub">Or: System Settings</p>
+    <p>Double-click Sweep and click <strong>Done</strong>, then open <strong>System
+    Settings > Privacy &amp; Security</strong> and click <strong>Open Anyway</strong>.</p>
 
     <button class="btn done" onclick="hideOpenHelp()">Got it</button>
   </div>
