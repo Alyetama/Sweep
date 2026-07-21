@@ -28,10 +28,12 @@ struct ContentView: View {
                 secondaryButton: .cancel()
             )
         }
-        // The admin prompt is hosted on a separate (clear) background view —
+        // The admin prompt is hosted on a separate (clear) background view:
         // SwiftUI only presents one `.alert` per view, so stacking it on the same
         // view as the confirmation alert above would silently suppress one of them.
         .background(adminAlertHost)
+        // Anything still on disk after a cleanup gets a sheet spelling out why.
+        .sheet(item: $model.failureReport) { FailureReportView(report: $0) }
     }
 
     private var adminAlertHost: some View {
@@ -41,7 +43,7 @@ struct ContentView: View {
                     title: Text("Some items need administrator access"),
                     message: Text("\(prompt.urls.count) protected item\(prompt.urls.count == 1 ? "" : "s") (\(Format.size(prompt.bytes))) couldn't be moved to the Trash. Remove them with your password?"),
                     primaryButton: .destructive(Text("Remove…")) { model.performAdminRemoval() },
-                    secondaryButton: .cancel(Text("Skip"))
+                    secondaryButton: .cancel(Text("Skip")) { model.skipAdminRemoval() }
                 )
             }
     }

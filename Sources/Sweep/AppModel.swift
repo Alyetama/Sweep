@@ -28,6 +28,11 @@ final class AppModel: ObservableObject {
     @Published var pendingConfirm: PendingRemoval?
     @Published var result: RemovalResult?
     @Published var adminPrompt: AdminPrompt?
+    @Published var failureReport: FailureReport?
+
+    /// Failures that elevating can't fix, held back until after the administrator
+    /// pass so the user gets one combined report instead of two dialogs.
+    private var deferredFailures: [Remover.Failure] = []
 
     // MARK: - Derived
 
@@ -222,13 +227,6 @@ final class AppModel: ObservableObject {
             let outcome = Remover.moveToTrash(urls, sizes: sizes)
             await MainActor.run {
                 self.finish(outcome, sizes: sizes, title: "Leftovers removed", removedAppID: nil)
-                // Drop emptied groups / files from the list.
-                let gone = Set(outcome.trashed)
-                self.leftovers = self.leftovers.compactMap { g in
-                    var g = g
-                    g.files.removeAll { gone.contains($0.url) }
-                    return g.files.isEmpty ? nil : g
-                }
             }
         }
     }
@@ -237,6 +235,11 @@ final class AppModel: ObservableObject {
 
     private func finish(_ outcome: Remover.Outcome, sizes: [URL: Int64],
                         title: String, removedAppID: InstalledApp.ID?) {
+        // Anything now off disk (moved to the Trash, or already gone before we
+        // got there) leaves the lists, so the UI never keeps showing a file that
+        // isn't there any more.
+        prune(outcome.resolved)
+
         if let id = removedAppID {
             // Drop the app from the list only once its bundle is actually gone
             // (a bundle that needed admin rights to remove may still be present).
@@ -250,29 +253,72 @@ final class AppModel: ObservableObject {
 
         result = RemovalResult(title: title, freedBytes: outcome.freedBytes,
                                removedCount: outcome.trashed.count,
-                               failedCount: outcome.otherFailures.count + outcome.needsAdmin.count)
+                               failedCount: outcome.failures.count)
 
-        if !outcome.needsAdmin.isEmpty {
-            adminPrompt = AdminPrompt(urls: outcome.needsAdmin,
-                                      bytes: outcome.needsAdmin.reduce(0) { $0 + (sizes[$1] ?? 0) })
+        let elevatable = outcome.elevatable
+        if !elevatable.isEmpty {
+            // Offer the administrator pass first, and hold the rest back so the
+            // user sees a single combined report at the end.
+            deferredFailures = outcome.failures.filter { !$0.canElevate }
+            adminPrompt = AdminPrompt(urls: elevatable,
+                                      bytes: elevatable.reduce(0) { $0 + (sizes[$1] ?? 0) },
+                                      sizes: sizes)
+        } else {
+            report(outcome.failures)
         }
+    }
+
+    /// Drops URLs that are no longer on disk from every visible list.
+    private func prune(_ gone: Set<URL>) {
+        guard !gone.isEmpty else { return }
+        relatedFiles.removeAll { gone.contains($0.url) }
+        leftovers = leftovers.compactMap { group in
+            var group = group
+            group.files.removeAll { gone.contains($0.url) }
+            return group.files.isEmpty ? nil : group
+        }
+    }
+
+    /// Shows exactly why each remaining item is still on disk.
+    private func report(_ failures: [Remover.Failure]) {
+        let all = deferredFailures + failures
+        deferredFailures = []
+        guard !all.isEmpty else { return }
+        failureReport = FailureReport(failures: all)
     }
 
     func performAdminRemoval() {
         guard let prompt = adminPrompt else { return }
         adminPrompt = nil
-        let urls = prompt.urls
+        let urls = prompt.urls, sizes = prompt.sizes
         Task.detached(priority: .userInitiated) {
-            let ok = Remover.removeWithAdmin(urls)
+            // removeWithAdmin re-checks the disk, so a cancelled password prompt
+            // or a still-blocked path comes back as a failure rather than a
+            // silent success.
+            let outcome = Remover.removeWithAdmin(urls, sizes: sizes)
             await MainActor.run {
-                if ok {
-                    let freed = prompt.bytes
-                    self.result = RemovalResult(title: "Admin items removed",
-                                                freedBytes: freed, removedCount: urls.count,
-                                                failedCount: 0)
+                self.prune(outcome.resolved)
+                if !outcome.trashed.isEmpty {
+                    self.result = RemovalResult(title: "Removed with administrator rights",
+                                                freedBytes: outcome.freedBytes,
+                                                removedCount: outcome.trashed.count,
+                                                failedCount: outcome.failures.count)
                 }
+                self.report(outcome.failures)
             }
         }
+    }
+
+    /// User declined the administrator prompt. Report those items as skipped,
+    /// together with anything else that failed.
+    func skipAdminRemoval() {
+        guard let prompt = adminPrompt else { return }
+        adminPrompt = nil
+        report(prompt.urls.map {
+            Remover.Failure(url: $0,
+                            reason: "Skipped, this item needs an administrator password.",
+                            canElevate: false)
+        })
     }
 }
 
@@ -292,4 +338,15 @@ struct AdminPrompt: Identifiable {
     let id = UUID()
     let urls: [URL]
     let bytes: Int64
+    let sizes: [URL: Int64]
+}
+
+/// Per-item explanation of everything that stayed on disk.
+struct FailureReport: Identifiable {
+    let id = UUID()
+    let failures: [Remover.Failure]
+
+    var needsFullDiskAccess: Bool {
+        failures.contains { $0.reason.contains("Full Disk Access") }
+    }
 }
