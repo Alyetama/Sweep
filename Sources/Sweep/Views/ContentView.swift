@@ -12,6 +12,7 @@ struct ContentView: View {
                 switch model.section {
                 case .uninstaller: UninstallerView()
                 case .leftovers:   LeftoversView()
+                case .largeFiles:  LargeFilesView()
                 }
             }
             .frame(minWidth: 680)

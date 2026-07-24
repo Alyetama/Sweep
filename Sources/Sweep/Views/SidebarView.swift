@@ -23,6 +23,15 @@ struct SidebarView: View {
                     symbol: "sparkles",
                     isSelected: model.section == .leftovers
                 ) { model.section = .leftovers }
+
+                SidebarItem(
+                    title: "Large Files",
+                    subtitle: model.didScanLargeFiles
+                        ? (model.largeFiles.isEmpty ? "None found" : "\(model.largeFiles.count) found")
+                        : "Tap to scan",
+                    symbol: "externaldrive.fill",
+                    isSelected: model.section == .largeFiles
+                ) { model.section = .largeFiles }
             }
             .padding(.horizontal, 10)
 

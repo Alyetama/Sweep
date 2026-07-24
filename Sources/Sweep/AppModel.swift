@@ -5,7 +5,7 @@ import AppKit
 @MainActor
 final class AppModel: ObservableObject {
 
-    enum Section: Hashable { case uninstaller, leftovers }
+    enum Section: Hashable { case uninstaller, leftovers, largeFiles }
     @Published var section: Section = .uninstaller
 
     // MARK: Uninstaller — app list
@@ -23,6 +23,13 @@ final class AppModel: ObservableObject {
     @Published var leftovers: [LeftoverGroup] = []
     @Published var isScanningLeftovers = false
     @Published var didScanLeftovers = false
+
+    // MARK: Large files
+    @Published var largeFiles: [LargeFile] = []
+    @Published var isScanningLargeFiles = false
+    @Published var didScanLargeFiles = false
+    @Published var threshold: SizeThreshold = .mb100
+    @Published var largeFileSort: LargeFileSort = .size
 
     // MARK: Removal flow
     @Published var pendingConfirm: PendingRemoval?
@@ -63,6 +70,16 @@ final class AppModel: ObservableObject {
 
     var totalReclaimable: Int64 { apps.reduce(0) { $0 + max(0, $1.sizeBytes) } }
     var leftoversTotalSize: Int64 { leftovers.reduce(0) { $0 + $1.totalSize } }
+
+    var sortedLargeFiles: [LargeFile] {
+        switch largeFileSort {
+        case .size:   return largeFiles.sorted { $0.sizeBytes > $1.sizeBytes }
+        case .oldest: return largeFiles.sorted { ($0.modified ?? .distantPast) < ($1.modified ?? .distantPast) }
+        }
+    }
+    var largeFilesTotalSize: Int64 { largeFiles.reduce(0) { $0 + $1.sizeBytes } }
+    var selectedLargeFiles: [LargeFile] { largeFiles.filter(\.isSelected) }
+    var selectedLargeFilesSize: Int64 { selectedLargeFiles.reduce(0) { $0 + $1.sizeBytes } }
 
     // MARK: - Loading apps
 
@@ -164,28 +181,28 @@ final class AppModel: ObservableObject {
         var message = "\(files.count) item\(files.count == 1 ? "" : "s") will be moved to the Trash."
         if let bid = app.bundleID,
            !NSRunningApplication.runningApplications(withBundleIdentifier: bid).isEmpty {
-            message += "\n\n\(app.name) is currently open — quit it first for a clean removal."
+            message += "\n\n\(app.name) is currently open. Quit it first for a clean removal."
         }
         pendingConfirm = PendingRemoval(
             title: "Uninstall \(app.name)?",
             message: message,
             bytes: files.reduce(0) { $0 + $1.sizeBytes },
-            files: files,
+            urls: files.map(\.url),
+            sizes: Dictionary(files.map { ($0.url, $0.sizeBytes) }, uniquingKeysWith: { a, _ in a }),
             appID: app.id,
-            appName: app.name
+            successTitle: "\(app.name) was uninstalled"
         )
     }
 
     func performPendingRemoval() {
         guard let pending = pendingConfirm else { return }
         pendingConfirm = nil
-        let sizes = Dictionary(pending.files.map { ($0.url, $0.sizeBytes) }, uniquingKeysWith: { a, _ in a })
-        let urls = pending.files.map(\.url)
+        let sizes = pending.sizes, urls = pending.urls
 
         Task.detached(priority: .userInitiated) {
             let outcome = Remover.moveToTrash(urls, sizes: sizes)
             await MainActor.run {
-                self.finish(outcome, sizes: sizes, title: "\(pending.appName) was uninstalled",
+                self.finish(outcome, sizes: sizes, title: pending.successTitle,
                             removedAppID: pending.appID)
             }
         }
@@ -231,6 +248,47 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Large files
+
+    func scanLargeFiles() {
+        isScanningLargeFiles = true
+        let minBytes = threshold.rawValue
+        Task.detached(priority: .userInitiated) {
+            let files = Scanner.largeFiles(minBytes: minBytes)
+            await MainActor.run {
+                self.largeFiles = files
+                self.isScanningLargeFiles = false
+                self.didScanLargeFiles = true
+            }
+        }
+    }
+
+    func toggleLargeFile(_ file: LargeFile) {
+        guard let i = largeFiles.firstIndex(of: file) else { return }
+        largeFiles[i].isSelected.toggle()
+    }
+
+    func setAllLargeFiles(selected: Bool) {
+        for i in largeFiles.indices { largeFiles[i].isSelected = selected }
+    }
+
+    /// Large files are the user's own documents, so removal always goes through
+    /// the confirmation sheet and nothing is ticked by default.
+    func requestLargeFileRemoval() {
+        let files = selectedLargeFiles
+        guard !files.isEmpty else { return }
+        pendingConfirm = PendingRemoval(
+            title: files.count == 1
+                ? "Move \"\(files[0].name)\" to the Trash?"
+                : "Move \(files.count) files to the Trash?",
+            message: "\(files.count) item\(files.count == 1 ? "" : "s") will be moved to the Trash.",
+            bytes: files.reduce(0) { $0 + $1.sizeBytes },
+            urls: files.map(\.url),
+            sizes: Dictionary(files.map { ($0.url, $0.sizeBytes) }, uniquingKeysWith: { a, _ in a }),
+            appID: nil,
+            successTitle: "Large files removed")
+    }
+
     // MARK: - Shared completion / admin escalation
 
     private func finish(_ outcome: Remover.Outcome, sizes: [URL: Int64],
@@ -272,6 +330,7 @@ final class AppModel: ObservableObject {
     private func prune(_ gone: Set<URL>) {
         guard !gone.isEmpty else { return }
         relatedFiles.removeAll { gone.contains($0.url) }
+        largeFiles.removeAll { gone.contains($0.url) }
         leftovers = leftovers.compactMap { group in
             var group = group
             group.files.removeAll { gone.contains($0.url) }
@@ -324,14 +383,18 @@ final class AppModel: ObservableObject {
 
 // MARK: - Small flow value types
 
+/// A removal waiting on the user's confirmation. Used by both the uninstaller
+/// and the large-files scan, so it carries plain URLs rather than app-specific
+/// values; `appID` is set only when an app bundle is going away.
 struct PendingRemoval: Identifiable {
     let id = UUID()
     let title: String
     let message: String
     let bytes: Int64
-    let files: [RelatedFile]
-    let appID: InstalledApp.ID
-    let appName: String
+    let urls: [URL]
+    let sizes: [URL: Int64]
+    let appID: InstalledApp.ID?
+    let successTitle: String
 }
 
 struct AdminPrompt: Identifiable {

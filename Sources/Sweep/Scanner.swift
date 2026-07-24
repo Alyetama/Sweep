@@ -257,6 +257,111 @@ enum Scanner {
             .sorted { $0.totalSize > $1.totalSize }
     }
 
+    // MARK: Large files
+
+    /// Walks the user's visible folders for anything at or above `minBytes`.
+    ///
+    /// Hidden items are skipped, which keeps `~/Library`, `~/.Trash` and version
+    /// control internals out of the results: this list is for the user's own
+    /// documents and downloads, not app-managed data. Packages (`.app`,
+    /// `.photoslibrary`, Final Cut libraries) are measured whole and never
+    /// descended into, so a media library shows up as one row instead of
+    /// thousands.
+    static func largeFiles(minBytes: Int64, limit: Int = 500) -> [LargeFile] {
+        // Spotlight already has every file's size indexed, so ask it rather than
+        // walking the whole home folder: a tree with a few node_modules in it
+        // takes a minute to walk and under a second to query.
+        var found = spotlightLargeFiles(minBytes: minBytes)
+        if found.isEmpty { found = walkLargeFiles(minBytes: minBytes) }
+        return Array(found.sorted { $0.sizeBytes > $1.sizeBytes }.prefix(limit))
+    }
+
+    private static func spotlightLargeFiles(minBytes: Int64) -> [LargeFile] {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/mdfind")
+        task.arguments = ["-onlyin", Locations.home.path, "kMDItemFSSize > \(minBytes)"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+
+        guard (try? task.run()) != nil else { return [] }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+
+        return String(decoding: data, as: UTF8.self)
+            .split(separator: "\n")
+            .compactMap { largeFile(at: URL(fileURLWithPath: String($0)), minBytes: minBytes) }
+    }
+
+    /// Fallback for machines where Spotlight indexing is off.
+    private static func walkLargeFiles(minBytes: Int64) -> [LargeFile] {
+        guard let en = FileManager.default.enumerator(
+            at: Locations.home, includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants],
+            errorHandler: { _, _ in true }) else { return [] }
+
+        var found: [LargeFile] = []
+        for case let url as URL in en {
+            // Dependency and build trees hold thousands of files and no user
+            // documents; walking into them is what makes this path slow.
+            if skippedFolders.contains(url.lastPathComponent) {
+                en.skipDescendants()
+                continue
+            }
+            if let file = largeFile(at: url, minBytes: minBytes) { found.append(file) }
+        }
+        return found
+    }
+
+    private static let skippedFolders: Set<String> = [
+        "node_modules", "DerivedData", ".build", "build", "Pods", "target", "vendor"
+    ]
+
+    /// Measures one candidate, returning nil when it isn't a user file we should
+    /// offer to delete (inside `~/Library`, hidden, a symlink, inside a package,
+    /// or simply not big enough).
+    private static func largeFile(at url: URL, minBytes: Int64) -> LargeFile? {
+        // Apps belong to the Uninstaller tab. Trashing a bundle from here would
+        // dump the binary and leave every support file behind, which is exactly
+        // what this app exists to prevent.
+        guard url.pathExtension != "app", isUserDocument(url) else { return nil }
+        let keys: Set<URLResourceKey> = [.isDirectoryKey, .isPackageKey, .isSymbolicLinkKey,
+                                         .totalFileAllocatedSizeKey, .fileAllocatedSizeKey,
+                                         .contentModificationDateKey]
+        guard let v = try? url.resourceValues(forKeys: keys), v.isSymbolicLink != true else { return nil }
+
+        let isPackage = v.isPackage ?? false
+        // Plain directories are containers, not candidates.
+        if v.isDirectory == true, !isPackage { return nil }
+
+        let size = isPackage
+            ? diskSize(of: url)
+            : Int64(v.totalFileAllocatedSize ?? v.fileAllocatedSize ?? 0)
+        guard size >= minBytes else { return nil }
+
+        return LargeFile(url: url, sizeBytes: size,
+                         modified: v.contentModificationDate, isSelected: false)
+    }
+
+    /// Keeps the list to the user's own visible documents: no `~/Library`, no
+    /// hidden folders, and nothing buried inside a package such as a Photos
+    /// library (the package itself is still eligible).
+    private static func isUserDocument(_ url: URL) -> Bool {
+        let home = Locations.home.path
+        guard url.path.hasPrefix(home + "/") else { return false }
+        let parts = url.path.dropFirst(home.count + 1).split(separator: "/")
+        guard let first = parts.first, first != "Library" else { return false }
+        if parts.contains(where: { $0.hasPrefix(".") }) { return false }
+        return !parts.dropLast().contains { component in
+            packageSuffixes.contains { component.hasSuffix($0) }
+        }
+    }
+
+    private static let packageSuffixes = [
+        ".app", ".photoslibrary", ".fcpbundle", ".imovielibrary", ".tvlibrary",
+        ".logicx", ".band", ".rcproject", ".sparsebundle"
+    ]
+
     // MARK: - Matching helpers
 
     /// A child folder "belongs" to an app if its name matches the bundle id or the

@@ -69,7 +69,22 @@ enum Format {
         return bytes.string(fromByteCount: n)
     }
 
-    /// "2 months ago", "Today", "Never" — for the last-used hint.
+    /// "Modified 3 months ago" for the large-files list.
+    static func modified(_ date: Date?) -> String {
+        guard let date else { return "" }
+        let days = Calendar.current.dateComponents([.day], from: date, to: Date()).day ?? 0
+        switch days {
+        case ..<1:   return "Today"
+        case 1:      return "Yesterday"
+        case 2..<30: return "\(days) days ago"
+        case 30..<365:
+            let m = max(1, days / 30); return "\(m) month\(m == 1 ? "" : "s") ago"
+        default:
+            let y = max(1, days / 365); return "\(y) year\(y == 1 ? "" : "s") ago"
+        }
+    }
+
+    /// "2 months ago", "Today", "Never" for the last-used hint.
     static func lastUsed(_ date: Date?) -> String {
         guard let date else { return "Never used" }
         let days = Calendar.current.dateComponents([.day], from: date, to: Date()).day ?? 0

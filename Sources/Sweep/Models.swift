@@ -71,6 +71,47 @@ struct LeftoverGroup: Identifiable, Hashable {
     var selectedSize: Int64 { files.filter(\.isSelected).reduce(0) { $0 + $1.sizeBytes } }
 }
 
+// MARK: - Large files
+
+/// A single big file (or bundle) found under the user's folders.
+struct LargeFile: Identifiable, Hashable {
+    var id: URL { url }
+    let url: URL
+    let sizeBytes: Int64
+    let modified: Date?
+    var isSelected: Bool
+
+    var name: String { url.lastPathComponent }
+    /// Parent folder, `~`-abbreviated, shown under the file name.
+    var folder: String {
+        (url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath
+    }
+}
+
+/// Minimum size for the large-files scan.
+enum SizeThreshold: Int64, CaseIterable, Identifiable {
+    case mb50  = 52_428_800
+    case mb100 = 104_857_600
+    case mb500 = 524_288_000
+    case gb1   = 1_073_741_824
+
+    var id: Int64 { rawValue }
+    var label: String {
+        switch self {
+        case .mb50:  return "50 MB"
+        case .mb100: return "100 MB"
+        case .mb500: return "500 MB"
+        case .gb1:   return "1 GB"
+        }
+    }
+}
+
+enum LargeFileSort: String, CaseIterable, Identifiable {
+    case size = "Largest"
+    case oldest = "Oldest"
+    var id: String { rawValue }
+}
+
 // MARK: - Sorting
 
 enum AppSort: String, CaseIterable, Identifiable {
