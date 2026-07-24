@@ -301,7 +301,14 @@ enum Scanner {
             errorHandler: { _, _ in true }) else { return [] }
 
         var found: [LargeFile] = []
+        let home = Locations.home.standardizedFileURL
         for case let url as URL in en {
+            // Don't even descend into ~/Applications or ~/Library.
+            if url.deletingLastPathComponent().standardizedFileURL == home,
+               excludedTopLevelFolders.contains(url.lastPathComponent) {
+                en.skipDescendants()
+                continue
+            }
             // Dependency and build trees hold thousands of files and no user
             // documents; walking into them is what makes this path slow.
             if skippedFolders.contains(url.lastPathComponent) {
@@ -343,19 +350,27 @@ enum Scanner {
                          modified: v.contentModificationDate, isSelected: false)
     }
 
-    /// Keeps the list to the user's own visible documents: no `~/Library`, no
-    /// hidden folders, and nothing buried inside a package such as a Photos
-    /// library (the package itself is still eligible).
+    /// Keeps the list to the user's own visible documents: nothing from the
+    /// Applications or Library folders, no hidden folders, and nothing buried
+    /// inside a package such as a Photos library (the package itself is still
+    /// eligible).
     private static func isUserDocument(_ url: URL) -> Bool {
         let home = Locations.home.path
         guard url.path.hasPrefix(home + "/") else { return false }
         let parts = url.path.dropFirst(home.count + 1).split(separator: "/")
-        guard let first = parts.first, first != "Library" else { return false }
+        guard let first = parts.first,
+              !excludedTopLevelFolders.contains(String(first)) else { return false }
         if parts.contains(where: { $0.hasPrefix(".") }) { return false }
         return !parts.dropLast().contains { component in
             packageSuffixes.contains { component.hasSuffix($0) }
         }
     }
+
+    /// Whole folders the large-files scan stays out of. Applications and
+    /// everything they lean on belong to the Uninstaller tab: deleting a bundle
+    /// or its support data from here would strand the rest of the app's files,
+    /// which is the mess this app exists to avoid.
+    private static let excludedTopLevelFolders: Set<String> = ["Applications", "Library"]
 
     private static let packageSuffixes = [
         ".app", ".photoslibrary", ".fcpbundle", ".imovielibrary", ".tvlibrary",

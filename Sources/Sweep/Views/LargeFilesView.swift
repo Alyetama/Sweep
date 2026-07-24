@@ -71,7 +71,7 @@ struct LargeFilesView: View {
     private var intro: some View {
         centered(symbol: "externaldrive.fill", tint: Brand.accent,
                  title: "Find your biggest files",
-                 subtitle: "Scans your home folder for files over the size you pick.\nNothing is selected for you, and nothing leaves without your say-so.") {
+                 subtitle: "Scans your home folder for files over the size you pick, skipping\nyour apps and their data. Nothing leaves without your say-so.") {
             Button { model.scanLargeFiles() } label: {
                 Text("Scan for Large Files")
                     .font(.system(size: 13, weight: .semibold))
