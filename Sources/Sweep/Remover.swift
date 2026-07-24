@@ -67,8 +67,13 @@ enum Remover {
             .map { "'" + $0.path.replacingOccurrences(of: "'", with: "'\\''") + "'" }
             .joined(separator: " ")
         let shell = "/bin/rm -rf \(args)"
-        let source = "do shell script \"\(shell.replacingOccurrences(of: "\"", with: "\\\""))\" "
-            + "with administrator privileges"
+        // Escape backslashes before quotes: AppleScript string literals treat `\`
+        // as an escape character, so a path containing one otherwise produces a
+        // syntax error and the whole batch fails.
+        let escaped = shell
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let source = "do shell script \"\(escaped)\" with administrator privileges"
 
         var errorInfo: NSDictionary?
         NSAppleScript(source: source)?.executeAndReturnError(&errorInfo)

@@ -40,14 +40,17 @@ struct LargeFilesView: View {
                 VStack(alignment: .trailing, spacing: 1) {
                     Text(Format.size(model.largeFilesTotalSize))
                         .font(.system(size: 20, weight: .bold, design: .rounded)).monospacedDigit()
-                    Text("\(model.largeFiles.count) files").font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                    Text(model.largeFilesTruncated
+                         ? "largest \(model.largeFiles.count) files"
+                         : "\(model.largeFiles.count) files")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
                 }
             }
             Picker("", selection: $model.threshold) {
                 ForEach(SizeThreshold.allCases) { Text("Over \($0.label)").tag($0) }
             }
             .labelsHidden().fixedSize()
+            .disabled(model.isScanningLargeFiles)
             .onChange(of: model.threshold) { _ in
                 if model.didScanLargeFiles { model.scanLargeFiles() }
             }

@@ -41,6 +41,10 @@ final class AppModel: ObservableObject {
     /// pass so the user gets one combined report instead of two dialogs.
     private var deferredFailures: [Remover.Failure] = []
 
+    /// Identifies the newest large-files scan, so a slower earlier one can't
+    /// overwrite its results.
+    private var largeScanToken = 0
+
     // MARK: - Derived
 
     var selectedApp: InstalledApp? { apps.first { $0.id == selectedAppID } }
@@ -74,10 +78,13 @@ final class AppModel: ObservableObject {
     var sortedLargeFiles: [LargeFile] {
         switch largeFileSort {
         case .size:   return largeFiles.sorted { $0.sizeBytes > $1.sizeBytes }
-        case .oldest: return largeFiles.sorted { ($0.modified ?? .distantPast) < ($1.modified ?? .distantPast) }
+        // Unknown dates sort last rather than masquerading as the oldest files.
+        case .oldest: return largeFiles.sorted { ($0.modified ?? .distantFuture) < ($1.modified ?? .distantFuture) }
         }
     }
     var largeFilesTotalSize: Int64 { largeFiles.reduce(0) { $0 + $1.sizeBytes } }
+    /// The scan caps its results, so say "largest N" rather than implying N is all there is.
+    var largeFilesTruncated: Bool { largeFiles.count >= Scanner.largeFileLimit }
     var selectedLargeFiles: [LargeFile] { largeFiles.filter(\.isSelected) }
     var selectedLargeFilesSize: Int64 { selectedLargeFiles.reduce(0) { $0 + $1.sizeBytes } }
 
@@ -151,10 +158,13 @@ final class AppModel: ObservableObject {
 
     // MARK: File selection toggles
 
+    // Look rows up by identity, never by value: `==` on these structs also
+    // compares `isSelected`, so a value-based search silently misses (and the
+    // click does nothing) whenever the model changed between render and tap.
     func toggleFile(_ file: RelatedFile) {
-        guard let i = relatedFiles.firstIndex(of: file) else { return }
-        // The app bundle (first/.binary row) is the point of uninstalling — keep
-        // it locked on.
+        guard let i = relatedFiles.firstIndex(where: { $0.id == file.id }) else { return }
+        // The app bundle (first/.binary row) is the point of uninstalling, so
+        // keep it locked on.
         guard relatedFiles[i].category != .binary else { return }
         relatedFiles[i].isSelected.toggle()
     }
@@ -224,13 +234,13 @@ final class AppModel: ObservableObject {
     }
 
     func toggleLeftoverFile(group: LeftoverGroup, file: RelatedFile) {
-        guard let gi = leftovers.firstIndex(of: group),
-              let fi = leftovers[gi].files.firstIndex(of: file) else { return }
+        guard let gi = leftovers.firstIndex(where: { $0.id == group.id }),
+              let fi = leftovers[gi].files.firstIndex(where: { $0.id == file.id }) else { return }
         leftovers[gi].files[fi].isSelected.toggle()
     }
 
     func toggleLeftoverGroup(_ group: LeftoverGroup) {
-        guard let gi = leftovers.firstIndex(of: group) else { return }
+        guard let gi = leftovers.firstIndex(where: { $0.id == group.id }) else { return }
         let turnOn = !leftovers[gi].isFullySelected
         for fi in leftovers[gi].files.indices { leftovers[gi].files[fi].isSelected = turnOn }
     }
@@ -253,9 +263,14 @@ final class AppModel: ObservableObject {
     func scanLargeFiles() {
         isScanningLargeFiles = true
         let minBytes = threshold.rawValue
+        // Changing the threshold restarts the scan, so tag each run and ignore
+        // any that finishes after a newer one started.
+        largeScanToken &+= 1
+        let token = largeScanToken
         Task.detached(priority: .userInitiated) {
             let files = Scanner.largeFiles(minBytes: minBytes)
             await MainActor.run {
+                guard self.largeScanToken == token else { return }
                 self.largeFiles = files
                 self.isScanningLargeFiles = false
                 self.didScanLargeFiles = true
@@ -264,7 +279,7 @@ final class AppModel: ObservableObject {
     }
 
     func toggleLargeFile(_ file: LargeFile) {
-        guard let i = largeFiles.firstIndex(of: file) else { return }
+        guard let i = largeFiles.firstIndex(where: { $0.id == file.id }) else { return }
         largeFiles[i].isSelected.toggle()
     }
 

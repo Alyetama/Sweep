@@ -267,30 +267,55 @@ enum Scanner {
     /// `.photoslibrary`, Final Cut libraries) are measured whole and never
     /// descended into, so a media library shows up as one row instead of
     /// thousands.
-    static func largeFiles(minBytes: Int64, limit: Int = 500) -> [LargeFile] {
+    /// Cap on how many results the large-files scan returns.
+    static let largeFileLimit = 1000
+
+    static func largeFiles(minBytes: Int64, limit: Int = largeFileLimit) -> [LargeFile] {
         // Spotlight already has every file's size indexed, so ask it rather than
         // walking the whole home folder: a tree with a few node_modules in it
         // takes a minute to walk and under a second to query.
-        var found = spotlightLargeFiles(minBytes: minBytes)
-        if found.isEmpty { found = walkLargeFiles(minBytes: minBytes) }
+        let found = spotlightLargeFiles(minBytes: minBytes) ?? walkLargeFiles(minBytes: minBytes)
         return Array(found.sorted { $0.sizeBytes > $1.sizeBytes }.prefix(limit))
     }
 
-    private static func spotlightLargeFiles(minBytes: Int64) -> [LargeFile] {
+    /// Returns nil when Spotlight couldn't answer, so the caller knows to fall
+    /// back to the slow walk. An empty array means Spotlight answered and there
+    /// genuinely is nothing: "no results" must not trigger a 40-second walk, and
+    /// it happens often, since every hit inside ~/Applications or ~/Library is
+    /// filtered out afterwards.
+    private static func spotlightLargeFiles(minBytes: Int64) -> [LargeFile]? {
+        guard let out = run("/usr/bin/mdfind",
+                            ["-onlyin", Locations.home.path, "kMDItemFSSize > \(minBytes)"])
+        else { return nil }
+
+        let lines = out.split(separator: "\n")
+        // A blank answer is only believable when the index is actually running.
+        if lines.isEmpty, !spotlightIsIndexing() { return nil }
+
+        return lines.compactMap { largeFile(at: URL(fileURLWithPath: String($0)), minBytes: minBytes) }
+    }
+
+    private static func spotlightIsIndexing() -> Bool {
+        // Ask about the boot volume: `mdutil -s` on a home path reports
+        // "unknown indexing state".
+        (run("/usr/bin/mdutil", ["-s", "/"]) ?? "").contains("Indexing enabled")
+    }
+
+    /// Runs a tool and returns its stdout, or nil if it couldn't run or exited
+    /// with a failure.
+    private static func run(_ tool: String, _ arguments: [String]) -> String? {
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/mdfind")
-        task.arguments = ["-onlyin", Locations.home.path, "kMDItemFSSize > \(minBytes)"]
+        task.executableURL = URL(fileURLWithPath: tool)
+        task.arguments = arguments
         let pipe = Pipe()
         task.standardOutput = pipe
         task.standardError = FileHandle.nullDevice
 
-        guard (try? task.run()) != nil else { return [] }
+        guard (try? task.run()) != nil else { return nil }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         task.waitUntilExit()
-
+        guard task.terminationStatus == 0 else { return nil }
         return String(decoding: data, as: UTF8.self)
-            .split(separator: "\n")
-            .compactMap { largeFile(at: URL(fileURLWithPath: String($0)), minBytes: minBytes) }
     }
 
     /// Fallback for machines where Spotlight indexing is off.
