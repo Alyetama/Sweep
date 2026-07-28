@@ -31,8 +31,15 @@ also digs up junk left over from apps you got rid of ages ago.
   Matching is careful, so uninstalling `Notion` won't drag out `NotionCalendar`.
 - The Leftovers tab hunts down orphaned files from apps that are already gone,
   grouped by app so you can expand a group and see exactly what's there.
-- Nothing gets deleted outright. Files go to the Trash, so you can put them back
-  if you change your mind. Sort by size, name, or last used.
+- The Large Files tab lists the biggest files in your home folder, over a size
+  you pick. It skips `~/Applications` and `~/Library` so it never offers you an
+  app or its data. Nothing is ticked by default.
+- Files go to the Trash, so you can put them back if you change your mind. Sort
+  by size, name, or last used.
+- If macOS blocks a file, Sweep tells you which one and why instead of quietly
+  leaving it behind. When an administrator password would clear it, Sweep offers
+  that as a separate step you have to approve. That path runs `rm -rf` as root,
+  so those files are gone for good rather than going to the Trash.
 - Plain SwiftUI. No dependencies, nothing phones home.
 
 ## Install
@@ -77,12 +84,13 @@ Manager project that ad-hoc signs itself, so there's no Xcode project to open.
 ```
 Sources/Sweep/
   App.swift            # @main scene
-  Models.swift         # InstalledApp, RelatedFile, FileCategory, LeftoverGroup
-  Scanner.swift        # app discovery, related-file matching, leftovers scan
-  Remover.swift        # move-to-Trash + admin-escalation fallback
+  Models.swift         # InstalledApp, RelatedFile, FileCategory, LeftoverGroup, LargeFile
+  Scanner.swift        # app discovery, related-file matching, leftovers + large-file scans
+  Remover.swift        # move-to-Trash, failure classification, admin-escalation fallback
   AppModel.swift       # @MainActor view model / background-scan glue
   Theme.swift          # brand colors, category glyphs, formatters
-  Views/               # ContentView, Sidebar, Uninstaller, AppDetail, Leftovers
+  Views/               # ContentView, Sidebar, Uninstaller, AppDetail,
+                       # Leftovers, LargeFiles, FailureReport
 ```
 
 ## License

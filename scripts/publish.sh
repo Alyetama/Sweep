@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 REPO="Alyetama/Sweep"
-VERSION="v1.0.0"
+VERSION="${VERSION:-v1.1.0}"
 DESCRIPTION="A native macOS app uninstaller that finds every file an app leaves behind — and cleans up leftovers from apps you've already deleted."
 HOMEPAGE="https://alyetama.github.io/Sweep/"
 DMG="Sweep.dmg"
@@ -74,7 +74,13 @@ cat > "$NOTES_FILE" <<'NOTES'
 A native macOS app uninstaller that finds every file an app leaves behind —
 caches, preferences, containers, logs and more — shows them pre-selected, and
 asks before moving them to the Trash. Plus a Leftovers scanner for orphaned files
-from apps you've already deleted.
+from apps you've already deleted, and a Large Files tab for the biggest things in
+your home folder.
+
+When macOS blocks a file, Sweep now names it and says why instead of quietly
+leaving it in the list. If an administrator password would clear it, that runs as
+a separate step you have to approve — and it deletes for good rather than moving
+to the Trash.
 
 ### Install
 Open `Sweep.dmg` and drag **Sweep** into your **Applications** folder.
